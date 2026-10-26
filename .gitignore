@@ -1,0 +1,3 @@
+# Forge modules are installed here by r10k from the Puppetfile
+/modules/
+.r10k/

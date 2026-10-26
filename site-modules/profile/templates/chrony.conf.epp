@@ -1,0 +1,13 @@
+<%- | Array[String] $ntp_servers | -%>
+# Managed by Puppet (profile::base) - do not edit by hand
+<% $ntp_servers.each |$server| { -%>
+pool <%= $server %> iburst
+<% } -%>
+sourcedir /run/chrony-dhcp
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync
+keyfile /etc/chrony.keys
+ntsdumpdir /var/lib/chrony
+leapsectz right/UTC
+logdir /var/log/chrony

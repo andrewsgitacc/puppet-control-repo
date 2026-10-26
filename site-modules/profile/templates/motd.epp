@@ -1,0 +1,8 @@
+<%- | String $message, String $certname, String $environment, String $os | -%>
+
+  <%= $message %>
+
+  Host:        <%= $certname %>
+  OS:          <%= $os %>
+  Environment: <%= $environment %>
+

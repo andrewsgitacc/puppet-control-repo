@@ -1,0 +1,11 @@
+---
+# Node-specific override example: client-01 gets an extra package and
+# its own MOTD. Compare /etc/motd on client-01 vs client-02.
+
+profile::base::motd_message: "puppet-client-01: Hiera per-node override in action."
+
+profile::base::packages:
+  - vim-enhanced
+  - tree
+  - htop
+  - jq

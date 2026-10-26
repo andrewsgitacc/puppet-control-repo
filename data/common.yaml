@@ -1,0 +1,16 @@
+---
+# Applied to every node unless overridden in data/nodes/<certname>.yaml
+
+profile::base::motd_message: "Managed by Puppet (OpenVox) - local changes will be overwritten."
+
+profile::base::packages:
+  - vim-enhanced
+  - tree
+  - htop
+
+profile::base::ntp_servers:
+  - 0.au.pool.ntp.org
+  - 1.au.pool.ntp.org
+  - 2.au.pool.ntp.org
+
+profile::base::timezone: "Australia/Sydney"
