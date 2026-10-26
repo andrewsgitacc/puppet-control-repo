@@ -6,7 +6,7 @@ profile::base::motd_message: "Managed by Puppet (OpenVox) - local changes will b
 profile::base::packages:
   - vim-enhanced
   - tree
-  - htop
+  - bash-completion
 
 profile::base::ntp_servers:
   - 0.au.pool.ntp.org

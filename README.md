@@ -43,7 +43,7 @@ Jenkinsfile                      # CI: Puppetfile, YAML, parser validate, puppet
 
 | Resource | Detail |
 |---|---|
-| Packages | `vim-enhanced`, `tree`, `htop` (client-01 also gets `jq`) |
+| Packages | `vim-enhanced`, `tree`, `bash-completion` (client-01 also gets `jq`) |
 | `/etc/chrony.conf` + `chronyd` | AU NTP pool servers |
 | Timezone | `Australia/Sydney` |
 | `/etc/motd` | Message from Hiera plus host, OS and environment |

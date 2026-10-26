@@ -7,5 +7,5 @@ profile::base::motd_message: "puppet-client-01: Hiera per-node override in actio
 profile::base::packages:
   - vim-enhanced
   - tree
-  - htop
+  - bash-completion
   - jq
