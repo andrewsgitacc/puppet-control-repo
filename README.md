@@ -9,13 +9,28 @@ Puppet control repo for the OpenVox lab in [`labs/puppet`](https://github.com/an
 ## How it works
 
 ```
- git push ──► GitHub ──(r10k polls every 5 min)──► puppet.lab.local
-                                                   /etc/puppetlabs/code/environments/<branch>
-                                                          │
-                       puppet-client-01/02 ◄──(agent runs every 10 min)
+ PR ──(CI: validate)──► main ──► Kargo Warehouse (new Freight = a main commit)
+                                     │
+        development (automatic) ──► staging (Promote) ──► production (Promote)
+              │                          │                       │
+     branch development          branch staging          branch production
+              └──────── r10k on puppet.lab.local, every 5 min ────┘
+                     /etc/puppetlabs/code/environments/<branch>
+                                         │
+       puppet, puppet-client-01/02 ◄── agents run production every 10 min
 ```
 
-- **Every Git branch becomes a Puppet environment.** The default branch is `production`, which is the environment agents use by default. A branch called `feature_motd` becomes the `feature_motd` environment.
+- **You change `main`, through pull requests.** CI (`.github/workflows/validate.yml`) must be
+  green before a PR can merge.
+- **[Kargo](https://kargo.apps.lab.local) owns the environment branches** `development`,
+  `staging` and `production` (Phase 10b of the
+  [platform lab](https://github.com/andrewsgitacc/labs/tree/main/platform)). Every new commit
+  on `main` becomes **Freight**; Kargo copies it into `development` automatically, and into
+  `staging`, then `production`, when you press **Promote** — each only with Freight the
+  previous environment already has. Never push to those branches yourself.
+- **Every branch except `main` becomes a Puppet environment** (r10k). All nodes run
+  `production`; `development` and `staging` are there to try a change before it reaches the
+  nodes (see *Preview a change* below). Rolling back = promoting older Freight.
 - The **Puppetfile** lists Forge or Git modules. r10k installs them into `modules/`, which is not committed.
 - **Hiera** (`data/`) holds the settings. `common.yaml` applies to every node, and `nodes/<certname>.yaml` overrides it for one node.
 - **Roles and profiles:** `site.pp` gives each node one **role**. Each role includes **profiles**, and each profile does the actual configuration.
@@ -34,7 +49,8 @@ site-modules/
   role/manifests/                # role::client, role::puppet_server, role::base
   profile/manifests/base.pp      # packages, chrony, timezone, MOTD, marker file
   profile/templates/             # EPP templates
-Jenkinsfile                      # CI: Puppetfile, YAML, parser validate, puppet-lint
+.github/workflows/validate.yml   # CI: Puppetfile, YAML, parser/epp validate, puppet-lint
+Gemfile                          # CI tools: openvox, puppet-lint, r10k
 ```
 
 ## What the starter code does
@@ -54,47 +70,53 @@ Jenkinsfile                      # CI: Puppetfile, YAML, parser validate, puppet
 ### Make a change
 
 ```bash
-git clone git@github.com:andrewsgitacc/puppet-control-repo.git
-cd puppet-control-repo
+git checkout main && git pull
+git checkout -b change-motd
 # edit data/common.yaml, e.g. change profile::base::motd_message
-git commit -am "Change MOTD" && git push
+git commit -am "Change MOTD" && git push -u origin change-motd
 ```
 
-Within about 5 minutes r10k deploys the change. Agents pick it up on their next run, which happens every 10 minutes. To apply it immediately:
+Open a pull request into `main`, wait for **validate** to go green, merge. Within ~2 minutes
+Kargo has new Freight and promotes it to `development`; r10k deploys that branch within 5
+minutes (to deploy now: `ssh -t admin@172.16.79.70 "sudo systemctl start r10k-deploy.service"`).
+
+### Preview a change
+
+All nodes use `production`, so a change in `development` or `staging` doesn't touch them
+yet. See what it *would* do on a client, without changing anything:
 
 ```bash
-# Optional: force r10k to deploy now instead of waiting for the timer
-ssh -t admin@172.16.79.70 "sudo systemctl start r10k-deploy.service"
-
-# Run the agent on a client
-ssh -t admin@172.16.79.71 "sudo /opt/puppetlabs/bin/puppet agent -t"
+ssh -t admin@172.16.79.71 "sudo /opt/puppetlabs/bin/puppet agent -t --noop --environment development"
 ```
 
-### Test on a branch first
+### Promote
+
+In the Kargo UI (project **puppet**): Freight → **Promote** to `staging`, then to
+`production`. After r10k has deployed `production`, agents apply it on their next run (every
+10 minutes), or now: `ssh -t admin@172.16.79.71 "sudo /opt/puppetlabs/bin/puppet agent -t"`.
+`git log origin/production` shows every promotion.
+
+### Test a feature branch
+
+Pushing a branch still creates an environment of the same name (r10k), so you can try it
+on one client before opening the PR:
 
 ```bash
-git checkout -b feature_motd
-# edit ...
-git push -u origin feature_motd
-# after r10k deploys it, try it on one client only:
-ssh -t admin@172.16.79.71 "sudo /opt/puppetlabs/bin/puppet agent -t --environment feature_motd"
+ssh -t admin@172.16.79.71 "sudo /opt/puppetlabs/bin/puppet agent -t --noop --environment change_motd"
 ```
 
-When you're happy with it, merge into `production`. When you delete the branch, r10k removes the environment.
+(Environment names allow only letters, digits and `_`, so r10k turns `change-motd` into
+`change_motd`.)
+When you delete the branch, r10k removes the environment.
 
 ### Add a Forge module
 
 Add a `mod` line to the `Puppetfile`, then use the module's classes from a profile.
 
-## CI (Jenkins)
+## CI
 
-The `Jenkinsfile` runs `r10k puppetfile check`, YAML parsing, `puppet parser validate`, `puppet epp validate` and `puppet-lint`. Set up the job like the other labs:
-
-- **Pipeline script from SCM**
-- Repository URL: `https://github.com/andrewsgitacc/puppet-control-repo.git`
-- Branch: `*/production`
-- Script Path: `Jenkinsfile`
-
-First install the Puppet tooling on the Jenkins VM with `labs/puppet/04_configure_jenkins_for_puppet.yml`.
-
-> CI only reports problems. r10k deploys whatever is pushed to a branch, so use a feature branch, wait for a green build, then merge.
+`.github/workflows/validate.yml` runs `r10k puppetfile check`, YAML parsing,
+`puppet parser validate`, `puppet epp validate` and `puppet-lint` on GitHub-hosted runners,
+for every pull request into `main`. A branch rule on `main` requires it (Settings → Rules).
+(Before Phase 10b this ran as a Jenkins job on `production`; `labs/puppet` still has the
+Jenkins playbook if you want it back.)
