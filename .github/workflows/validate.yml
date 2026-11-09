@@ -1,0 +1,55 @@
+# CI for the control repo: the same checks the Jenkinsfile used to run, on GitHub-hosted
+# runners, for every pull request into main (and pushes to main). A branch rule on main
+# only accepts pull requests with this check green, so everything Kargo promotes from main
+# has passed it.
+name: validate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # OpenVox (puppet), puppet-lint and r10k from the Gemfile.
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Tool versions
+        run: |
+          echo "openvox:     $(bundle exec puppet --version)"
+          echo "puppet-lint: $(bundle exec puppet-lint --version)"
+          echo "r10k:        $(bundle exec r10k version)"
+
+      - name: Puppetfile syntax
+        run: bundle exec r10k puppetfile check
+
+      - name: YAML syntax (Hiera)
+        run: |
+          failed=0
+          for f in hiera.yaml $(find data -name '*.yaml'); do
+            echo "  $f"
+            ruby -ryaml -e 'YAML.load_file(ARGV[0])' "$f" || { echo "::error file=$f::invalid YAML"; failed=1; }
+          done
+          exit $failed
+
+      - name: Puppet parser validate
+        run: |
+          find manifests site-modules -name '*.pp' -print0 | xargs -0 bundle exec puppet parser validate
+          for t in $(find site-modules -name '*.epp'); do
+            echo "  $t"
+            bundle exec puppet epp validate "$t"
+          done
+
+      - name: puppet-lint
+        run: bundle exec puppet-lint --fail-on-warnings --no-140chars-check manifests site-modules
